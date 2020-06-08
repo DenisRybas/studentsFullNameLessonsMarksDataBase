@@ -3,6 +3,8 @@ package com.company;
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -19,7 +21,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
     private JButton loadFromFileButton;
     private JButton saveToFileButton;
     private JPanel mainPanel;
-    private DefaultListModel<String> model = new DefaultListModel<>();
+    private DefaultListModel<String> studentsListModel = new DefaultListModel<>();
     private JList<String> studentsList;
     private JLabel studentsLabel;
     private JButton addStudentButton;
@@ -27,7 +29,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
     private JButton addLessonButton;
     private JButton removeLessonButton;
     private JButton renameStudentButton;
-    private Map<String, Map<String, String>> studentsDataBase = null; //Map<family, lesson, mark>
+    private Map<String, Map<String, String>> studentsDataBase = new LinkedHashMap<>(); //Map<family, lesson, mark>
 
     private JFrame frameMain = null;
 
@@ -54,8 +56,8 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
 
                     try (BufferedReader in = new BufferedReader(new FileReader(file.getAbsoluteFile()))) {
                         String s;
-                        studentsDataBase = new HashMap<>();
-                        model = new DefaultListModel<>();
+                        studentsDataBase = new LinkedHashMap<>();
+                        studentsListModel = new DefaultListModel<>();
 
                         while ((s = in.readLine()) != null) {
                             String[] row = s.split(cvsSplitBy);
@@ -63,14 +65,14 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
                             String family = row[1];
                             String mark = row[2];
                             if (!studentsDataBase.containsKey(family)) {
-                                studentsDataBase.put(family, new HashMap<>());
-                                model.addElement(family);
+                                studentsDataBase.put(family, new LinkedHashMap<>());
+                                studentsListModel.addElement(family);
                             }
                             if (!studentsDataBase.get(family).containsKey(lesson))
                                 studentsDataBase.get(family).put(lesson, mark);
 
                         }
-                        studentsList.setModel(model);
+                        studentsList.setModel(studentsListModel);
 
                     } catch (IOException ex) {
                         ex.printStackTrace();
@@ -91,7 +93,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
                     }
                 }
 
-                BufferedWriter  writer;
+                BufferedWriter writer;
 
                 try {
                     writer = new BufferedWriter(new FileWriter(file));
@@ -119,18 +121,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
         studentsList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent evt) {
                 if (evt.getClickCount() == 2) {
-                    DefaultTableModel model = new DefaultTableModel(
-                            new String[]{"Lesson", "Mark"}, 0
-                    );
-
-                    String student = studentsList.getSelectedValue();
-
-                    Map<String, String> lessonsAndMarks = studentsDataBase.get(student);
-                    for (String lesson : lessonsAndMarks.keySet()) {
-                        String mark = lessonsAndMarks.get(lesson);
-                        model.addRow(new String[]{lesson, mark});
-                    }
-                    gradesTable.setModel(model);
+                    gradesTable.setModel(displayLessonsAndMarksOfStud(studentsList.getSelectedValue()));
                 }
 
             }
@@ -140,34 +131,134 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
         getGradesButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                DefaultTableModel model = new DefaultTableModel(
-                        new String[]{"Lesson", "Mark"}, 0
-                );
-
-                String student = studentsList.getSelectedValue();
-
-                Map<String, String> lessonsAndMarks = studentsDataBase.get(student);
-                for (String lesson : lessonsAndMarks.keySet()) {
-                    String mark = lessonsAndMarks.get(lesson);
-                    model.addRow(new String[]{lesson, mark});
-                }
-                gradesTable.setModel(model);
+                gradesTable.setModel(displayLessonsAndMarksOfStud(studentsList.getSelectedValue()));
             }
         });
 
         addStudentButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                ((DefaultListModel<String>)studentsList.getModel()).addElement("новый студент");
+                try {
+                    boolean fl = false;
+                    int i = 1;
+                    do {
+                        String key = "новый студент " + i;
+                        if (!studentsDataBase.containsKey(key)) {
+                            studentsDataBase.put(key, new LinkedHashMap<>());
+                            studentsListModel.addElement(key);
+                            studentsList.setModel(studentsListModel);
+                            fl = true;
+                        }
+                        i++;
+                    } while (!fl);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
             }
         });
 
-        studentsList.addListSelectionListener(new ListSelectionListener() {
+        removeStudentButton.addActionListener(new ActionListener() {
             @Override
-            public void valueChanged(ListSelectionEvent e) {
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    studentsDataBase.remove(studentsList.getSelectedValue());
+                    ((DefaultListModel<String>) studentsList.getModel()).remove(((DefaultListModel<String>) studentsList.getModel()).indexOf(studentsList.getSelectedValue()));
+                } catch (NullPointerException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
+
+        addLessonButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (!studentsListModel.isEmpty()) {
+                    DefaultTableModel model = displayLessonsAndMarksOfStud(studentsList.getSelectedValue());
+                    boolean fl = false;
+                    int i = 1;
+                    Map<String, String> lessonAndMark = studentsDataBase.get(studentsList.getSelectedValue());
+                    do {
+                        String lesson = "Новый предмет " + i;
+                        if (!lessonAndMark.containsKey(lesson)) {
+                            model.addRow(new String[]{lesson, "Оценка"});
+                            lessonAndMark.put(lesson, "Оценка");
+                            studentsDataBase.put(studentsList.getSelectedValue(), lessonAndMark);
+                            fl = true;
+                        }
+                        i++;
+                    } while (!fl);
+                    gradesTable.setModel(model);
+                }
+            }
+        });
+
+        removeLessonButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                DefaultTableModel model = displayLessonsAndMarksOfStud(studentsList.getSelectedValue());
+                studentsDataBase.remove(gradesTable.getValueAt(gradesTable.getSelectedRow(), 0));
+                model.removeRow(gradesTable.getSelectedRow());
+                gradesTable.setModel(model);
+            //TODO: НЕ РАБОТАЕТ
+            }
+        });
+
+        renameStudentButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                ListSelectionModel selectionModel = studentsList.getSelectionModel();
+                int index = selectionModel.getMinSelectionIndex();
+                if (index == -1) {
+                    return;
+                }
+
+                Object item = studentsListModel.getElementAt(index);
+                String text = JOptionPane.showInputDialog("Rename item", item);
+                String newItem;
+
+                if (text != null) {
+                    newItem = text.trim();
+                } else {
+                    return;
+                }
+
+                if (!newItem.isEmpty()) {
+                    Map<String, String> lessonsAndMarks = studentsDataBase.get(studentsList.getModel().getElementAt(index));
+                    studentsDataBase.remove(studentsList.getModel().getElementAt(index));
+                    studentsListModel.remove(index);
+                    studentsListModel.add(index, newItem);
+                    studentsDataBase.put(studentsList.getModel().getElementAt(index), lessonsAndMarks);
+                }
 
             }
         });
+
+        gradesTable.getModel().addTableModelListener(new TableModelListener() {
+            @Override
+            public void tableChanged(TableModelEvent e) {
+                DefaultTableModel model = (DefaultTableModel) gradesTable.getModel();
+                //model.setValueAt( ,e.getFirstRow(), 0);
+                //TODO: СОХРАНЯТЬ ИЗМЕНЕНИЯ
+
+            }
+        });
+    }
+
+    private DefaultTableModel displayLessonsAndMarksOfStud(String student) {
+        DefaultTableModel model = new DefaultTableModel(
+                new String[]{"Lesson", "Mark"}, 0
+        );
+
+        Map<String, String> lessonsAndMarks = studentsDataBase.get(student);
+        try {
+            for (String lesson : lessonsAndMarks.keySet()) {
+                String mark = lessonsAndMarks.get(lesson);
+                model.addRow(new String[]{lesson, mark});
+            }
+        } catch (NullPointerException ex) {
+            SwingUtils.showErrorMessageBox(ex);
+        }
+        return model;
     }
 
 
