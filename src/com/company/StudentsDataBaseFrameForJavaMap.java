@@ -7,10 +7,7 @@ import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.io.*;
 import java.util.*;
 
@@ -29,6 +26,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
     private JButton addLessonButton;
     private JButton removeLessonButton;
     private JButton renameStudentButton;
+    private JButton saveChangesButton;
     private Map<String, Map<String, String>> studentsDataBase = new LinkedHashMap<>(); //Map<family, lesson, mark>
 
     private JFrame frameMain = null;
@@ -85,35 +83,34 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 JFileChooser dialog = new JFileChooser();
-                File file = new File("");
                 if (dialog.showOpenDialog(frameMain) == JFileChooser.APPROVE_OPTION) {
-                    file = dialog.getSelectedFile();
+                    File file = dialog.getSelectedFile();
                     if (!file.exists()) {
                         throw new RuntimeException("File not found!");
                     }
-                }
 
-                BufferedWriter writer;
+                    BufferedWriter writer;
 
-                try {
-                    writer = new BufferedWriter(new FileWriter(file));
+                    try {
+                        writer = new BufferedWriter(new FileWriter(file));
 
-                    StringBuilder sb = new StringBuilder();
-                    for (String student : studentsDataBase.keySet()) {
-                        for (String lesson : studentsDataBase.get(student).keySet()) {
-                            String mark = studentsDataBase.get(student).get(lesson);
-                            sb.append(lesson);
-                            sb.append(',');
-                            sb.append(student);
-                            sb.append(',');
-                            sb.append(mark);
-                            sb.append('\n');
+                        StringBuilder sb = new StringBuilder();
+                        for (String student : studentsDataBase.keySet()) {
+                            for (String lesson : studentsDataBase.get(student).keySet()) {
+                                String mark = studentsDataBase.get(student).get(lesson);
+                                sb.append(lesson);
+                                sb.append(',');
+                                sb.append(student);
+                                sb.append(',');
+                                sb.append(mark);
+                                sb.append('\n');
+                            }
                         }
+                        writer.write(sb.toString());
+                        writer.close();
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
                     }
-                    writer.write(sb.toString());
-                    writer.close();
-                } catch (IOException ex) {
-                    ex.printStackTrace();
                 }
             }
         });
@@ -173,7 +170,8 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (!studentsListModel.isEmpty()) {
-                    DefaultTableModel model = displayLessonsAndMarksOfStud(studentsList.getSelectedValue());
+                    //saveChangesButton.doClick();
+                    DefaultTableModel model = (DefaultTableModel) gradesTable.getModel();
                     boolean fl = false;
                     int i = 1;
                     Map<String, String> lessonAndMark = studentsDataBase.get(studentsList.getSelectedValue());
@@ -188,6 +186,7 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
                         i++;
                     } while (!fl);
                     gradesTable.setModel(model);
+                    gradesTable.revalidate();
                 }
             }
         });
@@ -196,10 +195,10 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 DefaultTableModel model = displayLessonsAndMarksOfStud(studentsList.getSelectedValue());
-                studentsDataBase.remove(gradesTable.getValueAt(gradesTable.getSelectedRow(), 0));
+                studentsDataBase.get(studentsList.getSelectedValue()).remove(gradesTable.getValueAt(gradesTable.getSelectedRow(), 0).toString());
                 model.removeRow(gradesTable.getSelectedRow());
                 gradesTable.setModel(model);
-            //TODO: НЕ РАБОТАЕТ
+                gradesTable.revalidate();
             }
         });
 
@@ -233,13 +232,50 @@ public class StudentsDataBaseFrameForJavaMap extends JFrame {
             }
         });
 
+
+        saveChangesButton.addActionListener(new ActionListener() {
+            @Override//создать новый словарь
+            public void actionPerformed(ActionEvent e) {
+                DefaultTableModel model = (DefaultTableModel) gradesTable.getModel();
+                String[] modelData = new String[model.getRowCount()];
+                if (studentsDataBase.containsKey(studentsList.getSelectedValue())) {
+                    studentsDataBase.get(studentsList.getSelectedValue()).clear();
+                    for (int i = 0; i < model.getRowCount(); i++) {
+                        modelData[i] = (model.getValueAt(i, 0).toString());
+                        String key = modelData[i];
+                        studentsDataBase.get(studentsList.getSelectedValue()).put(key, model.getValueAt(i, 1).toString());
+                    }
+                    gradesTable.setModel(displayLessonsAndMarksOfStud(studentsList.getSelectedValue()));
+
+                    gradesTable.revalidate();
+                }
+            }
+        });
+
+        gradesTable.addKeyListener(new KeyListener() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    saveChangesButton.doClick();
+                }
+            }
+
+            @Override
+            public void keyPressed(KeyEvent e) {
+
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+
+            }
+        });
+
         gradesTable.getModel().addTableModelListener(new TableModelListener() {
             @Override
             public void tableChanged(TableModelEvent e) {
-                DefaultTableModel model = (DefaultTableModel) gradesTable.getModel();
-                //model.setValueAt( ,e.getFirstRow(), 0);
-                //TODO: СОХРАНЯТЬ ИЗМЕНЕНИЯ
-
+                gradesTable.setValueAt(gradesTable.getModel().getValueAt(e.getFirstRow(), e.getColumn()), e.getFirstRow(), e.getColumn());
+                saveChangesButton.doClick();
             }
         });
     }
